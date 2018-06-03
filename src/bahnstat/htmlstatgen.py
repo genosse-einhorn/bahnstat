@@ -32,7 +32,10 @@ CSS =   '''
 
 HTML_PREAMBLE = '<!DOCTYPE html><meta charset=UTF-8><meta name="viewport" content="width=device-width, initial-scale=1"><style>'+CSS+'</style>'
 
-HTML_POSTAMBLE = '<hr><p>Generiert: {} UTC</p>'.format(datetime.utcnow())
+HTML_POSTAMBLE = '''<hr>
+    <p>Generiert: {} UTC
+    durch <a href="https://github.com/rgcjonas/bahnstat">bahnstat</a>
+    von <a href="mailto:bahnstat@genosse-einhorn.de">Jonas Kümmerlin</a></p>'''.format(datetime.utcnow())
 
 def TITLE(t):
     return '<title>{}</title>'.format(html.escape(t))
