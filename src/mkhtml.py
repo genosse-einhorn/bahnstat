@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 def writefile(path, text):
     logging.debug('writing file {}'.format(path))
 
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(os.path.dirname(path), mode=0o755, exist_ok=True)
     with open(path, 'w') as f:
         f.write(text)
 
