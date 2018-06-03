@@ -34,6 +34,10 @@ db = DatabaseAccessor(DatabaseConnection(args.db_file))
 outdir = args.outdir
 gen = HtmlStatGen(db)
 
+logging.debug('materializing trip view')
+db.materialize_trips()
+logging.debug('done materializing trip view')
+
 stations = list(db.all_watched_stops())
 
 writefile(os.path.join(outdir, 'index.html'), gen.station_list())

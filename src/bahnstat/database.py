@@ -119,11 +119,32 @@ class DatabaseConnection:
              AND Arrival.time > Departure.time
              AND julianday(Arrival.time) - julianday(Departure.time) < 0.5''')
 
+    def _materialize_trip_view(self):
+        with self:
+            self.exec('''
+                CREATE TEMP TABLE Trip_ AS
+                SELECT train_name AS train_name,
+                       origin AS origin,
+                       destination AS destination,
+                       date AS date,
+                       dep_time AS dep_time,
+                       dep_delay AS dep_delay,
+                       arr_time AS arr_time,
+                       arr_delay AS arr_delay
+                FROM Trip''')
+            self.exec('DROP VIEW Trip')
+            self.exec('ALTER TABLE Trip_ RENAME TO Trip')
+            self.exec('CREATE INDEX Trip_Index_1 ON Trip(origin, destination, dep_time)')
+
 class DatabaseAccessor:
     """high-level database access"""
 
     def __init__(self, connection):
         self.connection = connection
+
+    def materialize_trips(self):
+        """creates a temporary table out of all the trips. This speeds up trip-related OLAP."""
+        self.connection._materialize_trip_view()
 
     def persist_watched_stop(self, stop):
         with self.connection:
