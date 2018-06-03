@@ -56,6 +56,12 @@ def DELAY(d):
     else:
         return '<span class=delayed>+{:.0f}</span>'.format(d)
 
+def STDEV(d):
+    if d is None:
+        return ''
+    else:
+        return '{:.1f}'.format(d)
+
 def highest_smaller(target, haystack):
     r = None
     for i in haystack:
@@ -154,7 +160,7 @@ class HtmlStatGen:
             jt = highest_smaller(t.dep_time, jumptimes)
             if jt is not None and jt > last_time:
                 l.append('<tr id="time_{:02}_{:02}">'.format(jt.hour, jt.minute))
-                l.append('<th colspan=12>')
+                l.append('<th colspan=11>')
                 l.append('{:02}:{:02} Uhr'.format(jt.hour, jt.minute))
 
             last_time = t.dep_time
@@ -173,18 +179,18 @@ class HtmlStatGen:
             l.append('<td>')
             l.append(DELAY(t.dep_delay_median))
             l.append('<td>')
-            # TODO: 90th percentile
+            l.append(DELAY(t.dep_delay_90perc))
             l.append('<td>')
-            # TODO: stdev
+            l.append(STDEV(t.dep_delay_stdev))
             l.append('<td>➔')
             l.append('<td>')
             l.append(html.escape('{:02}:{:02}'.format(t.arr_time.hour, t.arr_time.minute)))
             l.append('<td>')
             l.append(DELAY(t.arr_delay_median))
             l.append('<td>')
-            # TODO: 90th percentile
+            l.append(DELAY(t.arr_delay_90perc))
             l.append('<td>')
-            # TODO: stdev
+            l.append(STDEV(t.arr_delay_stdev))
 
         l.append('</table>')
 

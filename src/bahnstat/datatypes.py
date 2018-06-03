@@ -89,12 +89,17 @@ class Trip:
         self.train_name = train_name
 
 class AggregatedTrip:
-    def __init__(self, train_name, dep_time, dep_delay_median, arr_time, arr_delay_median, count):
+    def __init__(self, train_name, dep_time, dep_delay_median, dep_delay_90perc, dep_delay_stdev,
+                 arr_time, arr_delay_median, arr_delay_90perc, arr_delay_stdev, count):
         self.train_name = train_name
         self.dep_time = dep_time
         self.dep_delay_median = dep_delay_median
+        self.dep_delay_90perc = dep_delay_90perc
+        self.dep_delay_stdev  = dep_delay_stdev
         self.arr_time = arr_time
         self.arr_delay_median = arr_delay_median
+        self.arr_delay_90perc = arr_delay_90perc
+        self.arr_delay_stdev  = arr_delay_stdev
         self.count = count
 
 class AggregatedDeparture:

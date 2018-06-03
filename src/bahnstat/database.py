@@ -3,6 +3,7 @@ from uuid import UUID, uuid5
 from datetime import datetime, time
 import random
 import statistics
+import math
 
 from bahnstat.datatypes import *
 
@@ -26,6 +27,45 @@ class MedianAggregate:
         else:
             return statistics.median(self.l)
 
+class PercentileAggregate:
+    def __init__(self):
+        self.l = []
+        self.percentile = 1
+
+    def step(self, percentile, value):
+        if value is not None:
+            self.l.append(value)
+
+        self.percentile = percentile
+
+    def finalize(self):
+        self.l.sort()
+
+        if len(self.l) < 1:
+            return None
+
+        k = len(self.l) * self.percentile / 100
+        c = math.ceil(k)
+
+        if k == c:
+            return (self.l[int(c)-1] + self.l[int(c)])/2
+        else:
+            return self.l[int(c) - 1]
+
+class StdevAggregate:
+    def __init__(self):
+        self.l = []
+
+    def step(self, value):
+        if value is not None and math.isfinite(value):
+            self.l.append(value)
+
+    def finalize(self):
+        if len(self.l) < 2:
+            return None
+        else:
+            return statistics.stdev(self.l)
+
 DBVER_CURRENT = 1
 
 class DatabaseConnection:
@@ -35,6 +75,8 @@ class DatabaseConnection:
         self.conn.isolation_level = None
 
         self.conn.create_aggregate('median', 1, MedianAggregate)
+        self.conn.create_aggregate('percentile', 2, PercentileAggregate)
+        self.conn.create_aggregate('stdev', 1, StdevAggregate)
 
         self.conn.execute('PRAGMA foreign_keys = ON')
         self.conn.execute('PRAGMA recursive_triggers = ON')
@@ -200,14 +242,19 @@ class DatabaseAccessor:
             yield Trip(origin, dest, date, dep_time, dep_delay, arr_time, arr_delay, train_name)
 
     def aggregated_trips(self, origin, dest):
-        for train_name, dep_time, dep_delay, arr_time, arr_delay, count in self.connection.exec(
-                '''SELECT train_name, dep_time, median(dep_delay), arr_time, median(arr_delay), COUNT(*)
+        for train_name, dep_time, dep_delay, dep_delay_perc, dep_delay_stdev, \
+            arr_time, arr_delay, arr_delay_perc, arr_delay_stdev, count in self.connection.exec(
+                '''SELECT train_name, dep_time, median(dep_delay), percentile(90, dep_delay), stdev(dep_delay),
+                          arr_time, median(arr_delay), percentile(90, arr_delay), stdev(arr_delay), COUNT(*)
                    FROM trip
                    WHERE origin = :origin AND destination = :destination
                    GROUP BY train_name, dep_time, arr_time
                    ORDER BY dep_time ASC''', origin=origin.id, destination=dest.id):
-            yield AggregatedTrip(train_name, datetime.strptime(dep_time, '%H:%M').time(), dep_delay,
-                                 datetime.strptime(arr_time, '%H:%M').time(), arr_delay, count)
+            yield AggregatedTrip(train_name,
+                                 datetime.strptime(dep_time, '%H:%M').time(),
+                                 dep_delay, dep_delay_perc, dep_delay_stdev,
+                                 datetime.strptime(arr_time, '%H:%M').time(),
+                                 arr_delay, arr_delay_perc, arr_delay_stdev, count)
 
     def aggregated_trip_dates(self, origin, dest):
         count, min, max = self.connection.exec(
