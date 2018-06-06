@@ -6,6 +6,7 @@ import statistics
 import math
 
 from bahnstat.datatypes import *
+from bahnstat.holidays_bw import *
 
 sqlite3.enable_callback_tracebacks(True)
 
@@ -72,7 +73,8 @@ def date_type(datestr):
 
     d = datetime.strptime(datestr, '%Y-%m-%d').date()
 
-    # TODO: check holidays
+    if d in HOLIDAYS:
+        return 'sun'
 
     wd = d.weekday()
     if 0 <= wd <= 4:
