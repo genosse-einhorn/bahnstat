@@ -66,6 +66,31 @@ class StdevAggregate:
         else:
             return statistics.stdev(self.l)
 
+def date_type(datestr):
+    if datestr is None:
+        return None
+
+    d = datetime.strptime(datestr, '%Y-%m-%d').date()
+
+    # TODO: check holidays
+
+    wd = d.weekday()
+    if 0 <= wd <= 4:
+        return 'mofr'
+    elif wd == 5:
+        return 'sat'
+    elif wd == 6:
+        return 'sun'
+    else:
+        assert False
+
+def DATE_TYPE_SQL_CHECK(fieldname, t):
+    if t == 'any' or t == 'all':
+        return ' (1 = 1) '
+    else:
+        return " (DATE_TYPE({}) = '{}') ".format(fieldname, t)
+
+
 DBVER_CURRENT = 1
 
 class DatabaseConnection:
@@ -77,6 +102,8 @@ class DatabaseConnection:
         self.conn.create_aggregate('median', 1, MedianAggregate)
         self.conn.create_aggregate('percentile', 2, PercentileAggregate)
         self.conn.create_aggregate('stdev', 1, StdevAggregate)
+
+        self.conn.create_function('date_type', 1, date_type)
 
         self.conn.execute('PRAGMA foreign_keys = ON')
         self.conn.execute('PRAGMA recursive_triggers = ON')
@@ -241,13 +268,14 @@ class DatabaseAccessor:
                    ORDER BY dep_time ASC''', origin=origin.id, destination=dest.id):
             yield Trip(origin, dest, date, dep_time, dep_delay, arr_time, arr_delay, train_name)
 
-    def aggregated_trips(self, origin, dest):
+    def aggregated_trips(self, origin, dest, datetype='any'):
         for train_name, dep_time, dep_delay, dep_delay_perc, dep_delay_stdev, \
             arr_time, arr_delay, arr_delay_perc, arr_delay_stdev, count in self.connection.exec(
                 '''SELECT train_name, dep_time, median(dep_delay), percentile(90, dep_delay), stdev(dep_delay),
                           arr_time, median(arr_delay), percentile(90, arr_delay), stdev(arr_delay), COUNT(*)
                    FROM trip
                    WHERE origin = :origin AND destination = :destination
+                   AND''' + DATE_TYPE_SQL_CHECK('date', datetype) +'''
                    GROUP BY train_name, dep_time, arr_time
                    ORDER BY dep_time ASC''', origin=origin.id, destination=dest.id):
             yield AggregatedTrip(train_name,
@@ -256,15 +284,19 @@ class DatabaseAccessor:
                                  datetime.strptime(arr_time, '%H:%M').time(),
                                  arr_delay, arr_delay_perc, arr_delay_stdev, count)
 
-    def aggregated_trip_dates(self, origin, dest):
+    def aggregated_trip_dates(self, origin, dest, datetype='any'):
         count, min, max = self.connection.exec(
             '''SELECT COUNT(distinct date), MIN(date), MAX(date) FROM Trip
-               WHERE origin = :origin AND destination = :destination''',
+               WHERE origin = :origin AND destination = :destination AND'''
+                    + DATE_TYPE_SQL_CHECK('date', datetype),
                 origin=origin.id, destination=dest.id).fetchone()
 
-        return AggregateDateRange(int(count),
-                                  datetime.strptime(min, '%Y-%m-%d').date(),
-                                  datetime.strptime(max, '%Y-%m-%d').date())
+        if min is not None:
+            min = datetime.strptime(min, '%Y-%m-%d').date()
+        if max is not None:
+            max = datetime.strptime(max, '%Y-%m-%d').date()
+
+        return AggregateDateRange(int(count), min, max)
 
     def aggregated_departures(self, stop):
         for train_name, destination, hour, minute, delay, count in self.connection.exec(

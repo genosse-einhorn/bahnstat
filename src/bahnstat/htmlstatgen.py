@@ -130,12 +130,20 @@ class HtmlStatGen:
 
         return ''.join(l)
 
-    def trip_list(self, origin, dest):
+    def trip_list(self, origin, dest, datetype):
         l = [HTML_PREAMBLE, TITLE('Statistik {} ➔ {}'.format(origin.name, dest.name))]
 
         l.append(H1('Statistik {} ➔ {}'.format(origin.name, dest.name)))
 
-        dates = self.db.aggregated_trip_dates(origin, dest)
+        for t, desc in [('all', 'Alle'), ('mofr', 'Montag-Freitag'), ('sat', 'Samstag'), ('sun', 'Sonn- und Feiertag')]:
+            if t == datetype:
+                l.append('<strong>{}</strong>'.format(html.escape(desc)))
+            else:
+                l.append(A(t + '.html', desc))
+            l.append(' | ')
+        l.pop()
+
+        dates = self.db.aggregated_trip_dates(origin, dest, datetype)
         l.append('<p>Statistik über {} Verkehrstage von {} bis {}</p>'.format(dates.count, dates.first, dates.last))
 
         jumptimes = [time(2,0), time(4,0), time(6,0), time(8, 0), time(10, 0), time(12, 0),
@@ -155,7 +163,7 @@ class HtmlStatGen:
         l.append('<th>Zug<th>(n)<th>Plan<th>50%<th>90%<th>σ<th><th>Plan<th>50%<th>90%<th>σ')
 
         last_time = time(23,59)
-        for t in self.db.aggregated_trips(origin, dest):
+        for t in self.db.aggregated_trips(origin, dest, datetype):
 
             jt = highest_smaller(t.dep_time, jumptimes)
             if jt is not None and jt > last_time:
