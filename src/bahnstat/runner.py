@@ -11,7 +11,7 @@ import logging
 import time
 import random
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 class DepartureWatcher:
     def __init__(self, stop):
@@ -22,7 +22,7 @@ class DepartureWatcher:
         doc = browser.open(self.stop.dm_url(mode='dep'))
         dm = departure_monitor_from_response(doc.document_element)
 
-        log.debug('retrieved departure monitor for {} at {}'.format(dm.stop_name, dm.now))
+        _log.debug('retrieved departure monitor for {} at {}'.format(dm.stop_name, dm.now))
 
         for dep in dm.departures:
             db.persist_departure(self.stop, dep)
@@ -39,7 +39,7 @@ class ArrivalWatcher:
         doc = browser.open(self.stop.dm_url(mode='arr'))
         dm = arrival_monitor_from_response(doc.document_element)
 
-        log.debug('retrieved arrival monitor for {} at {}'.format(dm.stop_name, dm.now))
+        _log.debug('retrieved arrival monitor for {} at {}'.format(dm.stop_name, dm.now))
 
         for dep in dm.arrivals:
             db.persist_arrival(self.stop, dep)
@@ -48,7 +48,7 @@ class ArrivalWatcher:
         self.next_check = self.next_check + 60*2 + random.randrange(0, 15)
 
 class Runner:
-    def __init__(self, dbfile, stops, user_agent):
+    def __init__(self, dbfile, stops, user_agent, watchdog_func=None):
         self.browser = Browser(user_agent)
         self.db = DatabaseAccessor(DatabaseConnection(dbfile))
 
@@ -56,11 +56,16 @@ class Runner:
         self.watchers = []
         self.watchers.extend(DepartureWatcher(s) for s in stops)
         self.watchers.extend(ArrivalWatcher(s) for s in stops)
+        self.watchdog_func = watchdog_func
+
+    def watchdog(self):
+        if self.watchdog_func is not None:
+            self.watchdog_func()
 
     def run(self):
         for s in self.stops:
             self.db.persist_watched_stop(s)
-            log.debug('stop {} with url {}'.format(s.name, s.dm_url()))
+            _log.debug('stop {} with url {}'.format(s.name, s.dm_url()))
 
         for m in self.watchers:
             m.perform(self.db, self.browser)
@@ -72,6 +77,7 @@ class Runner:
                 if m.next_check < now:
                     m.perform(self.db, self.browser)
                     m.reschedule()
+                    self.watchdog()
 
 
             time.sleep(1)

@@ -2,6 +2,7 @@
 
 from bahnstat.datatypes import WatchedStop
 from bahnstat.runner import Runner
+from bahnstat.sdnotify import SystemdNotifier
 from config import *
 
 import logging
@@ -21,6 +22,6 @@ if not isinstance(num_loglevel, int):
 
 logging.basicConfig(level=num_loglevel)
 
-r = Runner(args.db_file, [WatchedStop(UUID(a),b,c) for a,b,c in STOPS], USER_AGENT)
+r = Runner(args.db_file, [WatchedStop(UUID(a),b,c) for a,b,c in STOPS], USER_AGENT, SystemdNotifier().watchdog)
 r.run()
 
