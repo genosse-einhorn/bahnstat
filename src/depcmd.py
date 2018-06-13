@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 
-from mechanize_mini import Browser
+from uuid import uuid4
 
-from efaxmlparser import *
-from datatypes import *
+from bahnstat.mechanize_mini import Browser
+
+from bahnstat.efaxmlparser import *
+from bahnstat.datatypes import *
 
 
 assert __name__ == '__main__'
 
-ka = WatchedStop(None, 7000090, 'Karlsruhe Hbf')
+ka = WatchedStop(uuid4(), 7000090, 'Karlsruhe Hbf')
 
 
 b = Browser('Mozilla/4.0 (compatible; MSIE 6.0; Windows 98)')

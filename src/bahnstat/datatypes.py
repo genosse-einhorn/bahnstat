@@ -1,10 +1,12 @@
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, date
+from datetime import time as _time
+from typing import Sequence, List, Optional, Iterable
 import random
-from urllib.parse import quote as urlquote
 
 class Departure:
-    def __init__(self, time, train_name, destination, stopid, trip_code, line_code, delay = None):
+    def __init__(self, time: datetime, train_name: str, destination: str, stopid: int,
+                 trip_code: int, line_code: str, delay: float = None) -> None:
         self.time = time
         self.train_name = train_name
         self.destination = destination
@@ -13,27 +15,16 @@ class Departure:
         self.line_code = line_code
         self.delay = delay
 
-    @property
-    def tripstoptimes_url(self):
-        return 'https://www.efa-bw.de/nvbw/XML_TRIPSTOPTIMES_REQUEST?tripCode={tripcode}&stopID={stopid}&time={stoph:02}{stopm:02}&date={year:04}{month:02}{day:02}&line={stateless}&tStOTType=all&useRealtime=1'.format(
-            tripcode = self.trip_code,
-            stopid = self.stop_id,
-            stoph = self.time.hour,
-            stopm = self.time.minute,
-            year = self.time.year,
-            month = self.time.month,
-            day = self.time.day,
-            stateless = urlquote(self.line_code))
-
 class DepartureMonitor:
-    def __init__(self, now, gid, name, departures):
+    def __init__(self, now: datetime, gid: str, name: str, departures: Iterable[Departure]) -> None:
         self.now = now
         self.stop_gid = gid
         self.stop_name = name
         self.departures = list(departures)
 
 class Arrival:
-    def __init__(self, time, train_name, origin, stopid, tripcode, linecode, delay):
+    def __init__(self, time: datetime, train_name: str, origin: str, stopid: int,
+                 tripcode: int, linecode: str, delay: float = None) -> None:
         self.time = time
         self.train_name = train_name
         self.origin = origin
@@ -42,32 +33,20 @@ class Arrival:
         self.line_code = linecode
         self.delay = delay
 
-    @property
-    def tripstoptimes_url(self):
-        return 'https://www.efa-bw.de/nvbw/XML_TRIPSTOPTIMES_REQUEST?tripCode={tripcode}&stopID={stopid}&time={stoph:02}{stopm:02}&date={year:04}{month:02}{day:02}&line={stateless}&tStOTType=all&useRealtime=1'.format(
-            tripcode = self.trip_code,
-            stopid = self.stop_id,
-            stoph = self.time.hour,
-            stopm = self.time.minute,
-            year = self.time.year,
-            month = self.time.month,
-            day = self.time.day,
-            stateless = urlquote(self.line_code))
-
 class ArrivalMonitor:
-    def __init__(self, now, gid, name, arrivals):
+    def __init__(self, now: datetime, gid: str, name: str, arrivals: Iterable[Arrival]) -> None:
         self.now = now
         self.stop_gid = gid
         self.stop_name = name
         self.arrivals = list(arrivals)
 
 class WatchedStop:
-    def __init__(self, id, efa_stop_id, name):
+    def __init__(self, id: UUID, efa_stop_id: int, name: str) -> None:
         self.id = id
         self.efa_stop_id = efa_stop_id
         self.name = name
 
-    def dm_url(self, *, mode='dep'):
+    def dm_url(self, *, mode:str='dep') -> str:
         return 'https://www.efa-bw.de/nvbw/XML_DM_REQUEST?language=de&name_dm={}&type_dm=any&mode=direct&useRealtime=1&itdDateTimeDepArr={}'.format(self.efa_stop_id, mode)
 
     def __eq__(self, other):
@@ -78,7 +57,10 @@ class WatchedStop:
 
 
 class Trip:
-    def __init__(self, origin, destination, date, dep_time, dep_delay, arr_time, arr_delay, train_name):
+    def __init__(self, origin: UUID, destination: UUID, date: date,
+                 dep_time: _time, dep_delay: Optional[float],
+                 arr_time: _time, arr_delay: Optional[float],
+                 train_name: str) -> None:
         self.origin = origin
         self.destionation = destination
         self.date = date
@@ -89,8 +71,16 @@ class Trip:
         self.train_name = train_name
 
 class AggregatedTrip:
-    def __init__(self, train_name, dep_time, dep_delay_median, dep_delay_90perc, dep_delay_stdev,
-                 arr_time, arr_delay_median, arr_delay_90perc, arr_delay_stdev, count):
+    def __init__(self, train_name: str,
+                 dep_time: _time,
+                 dep_delay_median: Optional[float],
+                 dep_delay_90perc: Optional[float],
+                 dep_delay_stdev: Optional[float],
+                 arr_time: _time,
+                 arr_delay_median: Optional[float],
+                 arr_delay_90perc: Optional[float],
+                 arr_delay_stdev: Optional[float],
+                 count: int) -> None:
         self.train_name = train_name
         self.dep_time = dep_time
         self.dep_delay_median = dep_delay_median
@@ -103,7 +93,8 @@ class AggregatedTrip:
         self.count = count
 
 class AggregatedDeparture:
-    def __init__(self, train_name, destination, time, delay_median, count):
+    def __init__(self, train_name: str, destination: UUID, time: _time,
+                 delay_median: Optional[float], count: int) -> None:
         self.destination = destination
         self.train_name = train_name
         self.time = time
@@ -111,7 +102,7 @@ class AggregatedDeparture:
         self.count = count
 
 class AggregateDateRange:
-    def __init__(self, count, first, last):
+    def __init__(self, count: int, first: date, last: date) -> None:
         self.count = count
         self.first = first
         self.last = last
