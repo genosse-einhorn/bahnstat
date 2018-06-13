@@ -6,12 +6,12 @@ import math
 from datetime import datetime, date
 from uuid import UUID
 
-from efaxmlparser import departure_monitor_from_response
-import mechanize_mini
+from bahnstat.efaxmlparser import departure_monitor_from_response
+import bahnstat.mechanize_mini as minimech
 
 def TestCaseXml(filename):
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testcases', filename), 'r', encoding='latin-1') as f:
-        return mechanize_mini.HTML(f.read())
+        return minimech.HTML(f.read())
 
 class TestDmParser(unittest.TestCase):
     def test_basic(self):
