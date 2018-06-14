@@ -5,3 +5,10 @@ EFA_STOPS = [
 ]
 
 EFA_USER_AGENT = 'I DID NOT CHANGE THE CONFIG'
+
+DB_API_KEY = 'XXX'
+
+DB_STOPS = [
+    ('3ab3112f-ae16-4d68-9925-a9156dcffb00', 8000191, 'Karlsruhe Hbf'),
+    # ...
+]

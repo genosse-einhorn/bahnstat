@@ -1,13 +1,13 @@
 from uuid import UUID
 from datetime import datetime, date, time
-from typing import Sequence, List, Optional, Iterable
+from typing import Sequence, List, Optional, Iterable, Any
 import random
 
 __all__ = [ 'Departure', 'Arrival', 'WatchedStop', 'Trip',
             'AggregatedTrip', 'AggregatedDeparture', 'AggregateDateRange' ]
 
 class Departure:
-    def __init__(self, time: datetime, train_name: str, destination: str, stopid: int,
+    def __init__(self, time: datetime, train_name: str, destination: str, stopid: Any,
                  trip_code: int, line_code: str, delay: float = None) -> None:
         self.time = time
         self.train_name = train_name
@@ -18,7 +18,7 @@ class Departure:
         self.delay = delay
 
 class Arrival:
-    def __init__(self, time: datetime, train_name: str, origin: str, stopid: int,
+    def __init__(self, time: datetime, train_name: str, origin: str, stopid: Any,
                  tripcode: int, linecode: str, delay: float = None) -> None:
         self.time = time
         self.train_name = train_name

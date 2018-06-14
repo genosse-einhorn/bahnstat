@@ -2,7 +2,7 @@ from urllib.request import urlopen, Request
 from xml.dom.minidom import parse as domparse
 from datetime import datetime, date, timedelta
 from bahnstat.datatypes import *
-from typing import Optional, Dict, Sequence, Iterator, Iterable, List, Set, Tuple
+from typing import Optional, Dict, Sequence, Iterator, Iterable, List, Set, Tuple, Union
 from functools import lru_cache
 import re
 import itertools
@@ -314,11 +314,12 @@ class _ApiClient:
         self.apiurl = apiurl
         self.headers = {'User-Agent': 'db-timetable-api-client/0.01 (dbclient@genosse-einhorn.de)'}
 
+        self.plan = lru_cache(maxsize=12)(self._plan) # type: ignore
+
         if apikey is not None:
             self.headers['Authorization'] = 'Bearer ' + apikey
 
-    @lru_cache(maxsize=12)
-    def plan(self, timeslice: datetime) -> Sequence[DbTimetableStop]:
+    def _plan(self, timeslice: datetime) -> Sequence[DbTimetableStop]:
         _log.debug('{}/plan/{}/{:02}{:02}{:02}/{:02}'.format(self.apiurl,
                 self.eva_id, timeslice.year % 100, timeslice.month, timeslice.day, timeslice.hour))
         with urlopen(Request('{}/plan/{}/{:02}{:02}{:02}/{:02}'.format(self.apiurl,
@@ -391,13 +392,13 @@ class DbTimetableClient:
 
     TODO: document how plan range and changes work
     """
-    def __init__(self, station_eva_id: int, *,
+    def __init__(self, station: WatchedStop, *,
                  lookbehind: timedelta = timedelta(hours=1), lookahead: timedelta = timedelta(hours=1),
                  apiurl:str='https://api.deutschebahn.com/timetables/v1', auth:str=None) -> None:
-        self.station_eva_id = station_eva_id
+        self.station = station
         self.lookahead = lookahead
         self.lookbehind = lookbehind
-        self._timetable_retriever = _TimetableChangeIntegrator(_ApiClient(station_eva_id, apiurl, auth))
+        self._timetable_retriever = _TimetableChangeIntegrator(_ApiClient(station.backend_stop_id, apiurl, auth))
 
     @staticmethod
     def _timeslices(range_min: datetime, range_max: datetime) -> Set[datetime]:
@@ -445,7 +446,7 @@ class DbTimetableClient:
                          + 10000 * s.id_start.day + 100 * s.id_start.hour + s.id_start.minute)
 
             yield Departure(s.departure.planned_time, train_name, s.departure.destination,
-                            self.station_eva_id, trip_code, s.id_trip, s.departure.delay)
+                            self.station, trip_code, s.id_trip, s.departure.delay)
 
     def _arrivals(self, stops: Iterable[DbTimetableStop], current_time: datetime) -> Iterator[Arrival]:
         for s in stops:
@@ -467,5 +468,5 @@ class DbTimetableClient:
                          + 10000 * s.id_start.day + 100 * s.id_start.hour + s.id_start.minute)
 
             yield Arrival(s.arrival.planned_time, train_name, s.arrival.origin,
-                            self.station_eva_id, trip_code, s.id_trip, s.arrival.delay)
+                            self.station, trip_code, s.id_trip, s.arrival.delay)
 

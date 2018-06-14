@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 
-from bahnstat.dbtimetableclient import *
+from bahnstat.dbtimetableclient import DbTimetableClient
+from bahnstat.datatypes import *
+from uuid import uuid4
 from datetime import datetime, date, timedelta
 import time
 import os
 import logging
+
+from config import *
 
 assert __name__ == '__main__'
 
@@ -17,7 +21,7 @@ time.tzset()
 KARLSRUHE = 8000191
 HAMBURG_S = 8098549
 OFFENBURG = 8000290
-client = DbTimetableClient(KARLSRUHE, auth='XXX')
+client = DbTimetableClient(WatchedStop(uuid4(), KARLSRUHE, ''), auth=DB_API_KEY)
 
 def dep_train_name(stop):
     if stop.departure.line is not None:
