@@ -1,7 +1,7 @@
 
-STOPS = [
+EFA_STOPS = [
     ('3ab3112f-ae16-4d68-9925-a9156dcffb00', 7000090, 'Karlsruhe Hbf'),
     # ...
 ]
 
-USER_AGENT = 'I DID NOT CHANGE THE CONFIG'
+EFA_USER_AGENT = 'I DID NOT CHANGE THE CONFIG'
