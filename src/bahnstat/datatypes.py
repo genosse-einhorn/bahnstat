@@ -3,8 +3,8 @@ from datetime import datetime, date, time
 from typing import Sequence, List, Optional, Iterable
 import random
 
-__all__ = [ 'Departure', 'DepartureMonitor', 'Arrival', 'ArrivalMonitor', 'WatchedStop',
-            'Trip', 'AggregatedTrip', 'AggregatedDeparture', 'AggregateDateRange' ]
+__all__ = [ 'Departure', 'Arrival', 'WatchedStop', 'Trip',
+            'AggregatedTrip', 'AggregatedDeparture', 'AggregateDateRange' ]
 
 class Departure:
     def __init__(self, time: datetime, train_name: str, destination: str, stopid: int,
@@ -17,13 +17,6 @@ class Departure:
         self.line_code = line_code
         self.delay = delay
 
-class DepartureMonitor:
-    def __init__(self, now: datetime, gid: str, name: str, departures: Iterable[Departure]) -> None:
-        self.now = now
-        self.stop_gid = gid
-        self.stop_name = name
-        self.departures = list(departures)
-
 class Arrival:
     def __init__(self, time: datetime, train_name: str, origin: str, stopid: int,
                  tripcode: int, linecode: str, delay: float = None) -> None:
@@ -35,21 +28,11 @@ class Arrival:
         self.line_code = linecode
         self.delay = delay
 
-class ArrivalMonitor:
-    def __init__(self, now: datetime, gid: str, name: str, arrivals: Iterable[Arrival]) -> None:
-        self.now = now
-        self.stop_gid = gid
-        self.stop_name = name
-        self.arrivals = list(arrivals)
-
 class WatchedStop:
-    def __init__(self, id: UUID, efa_stop_id: int, name: str) -> None:
+    def __init__(self, id: UUID, backend_stop_id: int, name: str) -> None:
         self.id = id
-        self.efa_stop_id = efa_stop_id
+        self.backend_stop_id = backend_stop_id
         self.name = name
-
-    def dm_url(self, *, mode:str='dep') -> str:
-        return 'https://www.efa-bw.de/nvbw/XML_DM_REQUEST?language=de&name_dm={}&type_dm=any&mode=direct&useRealtime=1&itdDateTimeDepArr={}'.format(self.efa_stop_id, mode)
 
     def __eq__(self, other):
         if isinstance(self, other.__class__):
@@ -59,7 +42,7 @@ class WatchedStop:
 
 
 class Trip:
-    def __init__(self, origin: UUID, destination: UUID, date: date,
+    def __init__(self, origin: WatchedStop, destination: WatchedStop, date: date,
                  dep_time: time, dep_delay: Optional[float],
                  arr_time: time, arr_delay: Optional[float],
                  train_name: str) -> None:

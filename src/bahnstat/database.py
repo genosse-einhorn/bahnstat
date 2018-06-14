@@ -4,6 +4,7 @@ from datetime import datetime, time
 import random
 import statistics
 import math
+from typing import Iterable, Iterator, Optional
 
 from bahnstat.datatypes import *
 from bahnstat.holidays_bw import *
@@ -97,7 +98,7 @@ DBVER_CURRENT = 1
 
 class DatabaseConnection:
     """low-level database access"""
-    def __init__(self, dbfile):
+    def __init__(self, dbfile: str) -> None:
         self.conn = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES)
         self.conn.isolation_level = None
 
@@ -210,21 +211,21 @@ class DatabaseConnection:
 class DatabaseAccessor:
     """high-level database access"""
 
-    def __init__(self, connection):
+    def __init__(self, connection: DatabaseConnection) -> None:
         self.connection = connection
 
-    def materialize_trips(self):
+    def materialize_trips(self) -> None:
         """creates a temporary table out of all the trips. This speeds up trip-related OLAP."""
         self.connection._materialize_trip_view()
 
-    def persist_watched_stop(self, stop):
+    def persist_watched_stop(self, stop: WatchedStop) -> None:
         with self.connection:
             self.connection.exec('''
                 INSERT OR REPLACE INTO WatchedStop (id, efa_stop_id, name)
                 VALUES (:uuid, :sid, :name)''',
-                uuid=stop.id, sid=stop.efa_stop_id, name=stop.name)
+                uuid=stop.id, sid=stop.backend_stop_id, name=stop.name)
 
-    def persist_departure(self, stop, dep):
+    def persist_departure(self, stop: WatchedStop, dep: Departure) -> None:
         with self.connection:
             # save scheduled data, unless it is already saved
             self.connection.exec('''INSERT OR IGNORE
@@ -239,7 +240,7 @@ class DatabaseAccessor:
                     WHERE stop=:sid AND time=:time AND trip_code=:tc AND line_code=:lc''',
                     delay=dep.delay, sid=stop.id, time=dep.time, tc=dep.trip_code, lc=dep.line_code)
 
-    def persist_arrival(self, stop, arr):
+    def persist_arrival(self, stop: WatchedStop, arr: Arrival) -> None:
         with self.connection:
             # save scheduled data, unless it is already saved
             self.connection.exec('''INSERT OR IGNORE
@@ -254,23 +255,23 @@ class DatabaseAccessor:
                     WHERE stop=:sid AND time=:time AND trip_code=:tc AND line_code=:lc''',
                     delay=arr.delay, sid=stop.id, time=arr.time, tc=arr.trip_code, lc=arr.line_code)
 
-    def all_watched_stops(self):
+    def all_watched_stops(self) -> Iterator[WatchedStop]:
         for id, efa_stop_id, name in self.connection.exec('SELECT id, efa_stop_id, name FROM WatchedStop'):
             yield WatchedStop(id, efa_stop_id, name)
 
-    def watched_stop_by_id(self, id):
+    def watched_stop_by_id(self, id) -> WatchedStop:
         id, efa_stop_id, name = self.connection.exec(
             'SELECT id, efa_stop_id, name FROM WatchedStop WHERE id = :id', id=id).fetchone()
         return WatchedStop(id, efa_stop_id, name)
 
-    def trips(self, origin, dest):
+    def trips(self, origin: WatchedStop, dest: WatchedStop) -> Iterator[Trip]:
         for train_name, date, dep_time, dep_delay, arr_time, arr_delay in self.connection.exec(
                 '''SELECT train_name, date, dep_time, dep_delay, arr_time, arr_delay FROM trip
                    WHERE origin = :origin AND destination = :destination
                    ORDER BY dep_time ASC''', origin=origin.id, destination=dest.id):
             yield Trip(origin, dest, date, dep_time, dep_delay, arr_time, arr_delay, train_name)
 
-    def aggregated_trips(self, origin, dest, datetype='any'):
+    def aggregated_trips(self, origin: WatchedStop, dest: WatchedStop, datetype:str='any') -> Iterator[AggregatedTrip]:
         for train_name, dep_time, dep_delay, dep_delay_perc, dep_delay_stdev, \
             arr_time, arr_delay, arr_delay_perc, arr_delay_stdev, count in self.connection.exec(
                 '''SELECT train_name, dep_time, median(dep_delay), percentile(90, dep_delay), stdev(dep_delay),
@@ -286,7 +287,7 @@ class DatabaseAccessor:
                                  datetime.strptime(arr_time, '%H:%M').time(),
                                  arr_delay, arr_delay_perc, arr_delay_stdev, count)
 
-    def aggregated_trip_dates(self, origin, dest, datetype='any'):
+    def aggregated_trip_dates(self, origin: WatchedStop, dest: WatchedStop, datetype:str='any') -> AggregateDateRange:
         count, min, max = self.connection.exec(
             '''SELECT COUNT(distinct date), MIN(date), MAX(date) FROM Trip
                WHERE origin = :origin AND destination = :destination AND'''
@@ -300,7 +301,7 @@ class DatabaseAccessor:
 
         return AggregateDateRange(int(count), min, max)
 
-    def aggregated_departures(self, stop):
+    def aggregated_departures(self, stop: WatchedStop) -> Iterator[AggregatedDeparture]:
         for train_name, destination, hour, minute, delay, count in self.connection.exec(
                 '''SELECT train_name, destination, strftime('%H', time) as hour,
                         strftime('%M', time) as minute, median(delay), COUNT(*)
@@ -310,7 +311,7 @@ class DatabaseAccessor:
                    ORDER BY hour, minute ASC''', stop=stop.id):
             yield AggregatedDeparture(train_name, destination, time(hour=int(hour), minute=int(minute)), delay, count)
 
-    def aggregated_departure_dates(self, stop):
+    def aggregated_departure_dates(self, stop: WatchedStop) -> AggregateDateRange:
         count, min, max = self.connection.exec(
                 '''SELECT COUNT(distinct strftime('%Y-%m-%d', time)),
                           MIN(strftime('%Y-%m-%d', time)),

@@ -1,8 +1,23 @@
 from datetime import datetime, date, timedelta
-from typing import Optional
+from typing import Optional, Iterable
 from bahnstat.datatypes import *
+from bahnstat.mechanize_mini import Browser
 
-def datetime_from_itdDateTime(itdDateTime) -> datetime:
+class DepartureMonitor:
+    def __init__(self, now: datetime, gid: str, name: str, departures: Iterable[Departure]) -> None:
+        self.now = now
+        self.stop_gid = gid
+        self.stop_name = name
+        self.departures = list(departures)
+
+class ArrivalMonitor:
+    def __init__(self, now: datetime, gid: str, name: str, arrivals: Iterable[Arrival]) -> None:
+        self.now = now
+        self.stop_gid = gid
+        self.stop_name = name
+        self.arrivals = list(arrivals)
+
+def _datetime_from_itdDateTime(itdDateTime) -> datetime:
     itdDate = itdDateTime.query_selector('itdDate')
     assert itdDate is not None
 
@@ -19,7 +34,7 @@ def datetime_from_itdDateTime(itdDateTime) -> datetime:
 
     return datetime(year, month, day, hour, minute)
 
-def departure_from_itdDeparture(itdDeparture) -> Departure:
+def _departure_from_itdDeparture(itdDeparture) -> Departure:
     if itdDeparture.query_selector('itdServingLine').get('trainType') is not None:
         train_name = '{} {}'.format(itdDeparture.query_selector('itdServingLine').get('trainType', ''),
                 itdDeparture.query_selector('itdServingLine').get('trainNum', ''))
@@ -35,7 +50,7 @@ def departure_from_itdDeparture(itdDeparture) -> Departure:
             delay = float('inf')
 
     return Departure(
-        datetime_from_itdDateTime(itdDeparture.query_selector('itdDateTime')),
+        _datetime_from_itdDateTime(itdDeparture.query_selector('itdDateTime')),
         train_name,
         itdDeparture.query_selector('itdServingLine').get('direction'),
         itdDeparture.get('stopID'),
@@ -43,7 +58,7 @@ def departure_from_itdDeparture(itdDeparture) -> Departure:
         itdDeparture.query_selector('itdServingLine').get('stateless'),
         delay)
 
-def arrival_from_itdArrival(itdArrival) -> Arrival:
+def _arrival_from_itdArrival(itdArrival) -> Arrival:
     if itdArrival.query_selector('itdServingLine').get('trainType') is not None:
         train_name = '{} {}'.format(itdArrival.query_selector('itdServingLine').get('trainType', ''),
                 itdArrival.query_selector('itdServingLine').get('trainNum', ''))
@@ -59,7 +74,7 @@ def arrival_from_itdArrival(itdArrival) -> Arrival:
             delay = float('inf')
 
     return Arrival(
-        datetime_from_itdDateTime(itdArrival.query_selector('itdDateTime')),
+        _datetime_from_itdDateTime(itdArrival.query_selector('itdDateTime')),
         train_name,
         itdArrival.query_selector('itdServingLine').get('directionFrom'),
         itdArrival.get('stopID'),
@@ -67,7 +82,7 @@ def arrival_from_itdArrival(itdArrival) -> Arrival:
         itdArrival.query_selector('itdServingLine').get('stateless'),
         delay)
 
-def departure_monitor_from_response(xmlnode) -> DepartureMonitor:
+def _departure_monitor_from_response(xmlnode) -> DepartureMonitor:
     if xmlnode.tag != 'itdrequest':
         xmlnode = xmlnode.query_selector('itdRequest') # type: ignore
         assert xmlnode is not None
@@ -84,11 +99,11 @@ def departure_monitor_from_response(xmlnode) -> DepartureMonitor:
     stop_gid = stop_gid_elem.get('gid') or ''
     stop_name = stop_name_elem.text_content
 
-    deps = [departure_from_itdDeparture(d) for d in xmlnode.query_selector_all('itdDepartureList itdDeparture')]
+    deps = [_departure_from_itdDeparture(d) for d in xmlnode.query_selector_all('itdDepartureList itdDeparture')]
 
     return DepartureMonitor(time, stop_gid, stop_name, deps)
 
-def arrival_monitor_from_response(xmlnode) -> ArrivalMonitor:
+def _arrival_monitor_from_response(xmlnode) -> ArrivalMonitor:
     if xmlnode.tag != 'itdrequest':
         xmlnode = xmlnode.query_selector('itdRequest') # type: ignore
         assert xmlnode is not None
@@ -105,6 +120,23 @@ def arrival_monitor_from_response(xmlnode) -> ArrivalMonitor:
     stop_gid = stop_gid_elem.get('gid') or ''
     stop_name = stop_name_elem.text_content
 
-    deps = [arrival_from_itdArrival(d) for d in xmlnode.query_selector_all('itdArrivalList itdArrival')]
+    deps = [_arrival_from_itdArrival(d) for d in xmlnode.query_selector_all('itdArrivalList itdArrival')]
 
     return ArrivalMonitor(time, stop_gid, stop_name, deps)
+
+def _stop_dm_url(stop: WatchedStop, *, mode:str='dep') -> str:
+        return 'https://www.efa-bw.de/nvbw/XML_DM_REQUEST?language=de&name_dm={}&type_dm=any&mode=direct&useRealtime=1&itdDateTimeDepArr={}'.format(stop.backend_stop_id, mode)
+
+class EfaXmlClient:
+    def __init__(self, user_agent: str) -> None:
+        self.user_agent = user_agent
+        self._browser = Browser(user_agent)
+
+    def departure_monitor(self, stop: WatchedStop) -> DepartureMonitor:
+        doc = self._browser.open(_stop_dm_url(stop, mode='dep'))
+        return _departure_monitor_from_response(doc.document_element)
+
+    def arrival_monitor(self, stop: WatchedStop) -> ArrivalMonitor:
+        doc = self._browser.open(_stop_dm_url(stop, mode='arr'))
+        return _arrival_monitor_from_response(doc.document_element)
+

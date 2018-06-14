@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from bahnstat.mechanize_mini import Browser
 
-from bahnstat.efaxmlparser import *
+from bahnstat.efaxmlclient import EfaXmlClient
 from bahnstat.datatypes import *
 
 
@@ -13,9 +13,9 @@ assert __name__ == '__main__'
 ka = WatchedStop(uuid4(), 7000090, 'Karlsruhe Hbf')
 
 
-b = Browser('Mozilla/4.0 (compatible; MSIE 6.0; Windows 98)')
+client = EfaXmlClient('Mozilla/4.0 (compatible; MSIE 6.0; Windows 98)')
 
-dm = departure_monitor_from_response(b.open(ka.dm_url()).document_element)
+dm = client.departure_monitor(ka)
 
 print('Departure Monitor for {} at {}'.format(dm.stop_name, dm.now))
 print('')
@@ -25,7 +25,7 @@ for dep in dm.departures:
 
 print('');print('');print('')
 
-am = arrival_monitor_from_response(b.open(ka.dm_url(mode='arr')).document_element)
+am = client.arrival_monitor(ka)
 
 print('Arrival Monitor for {} at {}'.format(am.stop_name, am.now))
 print('')
