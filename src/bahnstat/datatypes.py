@@ -1,8 +1,10 @@
 from uuid import UUID
-from datetime import datetime, date
-from datetime import time as _time
+from datetime import datetime, date, time
 from typing import Sequence, List, Optional, Iterable
 import random
+
+__all__ = [ 'Departure', 'DepartureMonitor', 'Arrival', 'ArrivalMonitor', 'WatchedStop',
+            'Trip', 'AggregatedTrip', 'AggregatedDeparture', 'AggregateDateRange' ]
 
 class Departure:
     def __init__(self, time: datetime, train_name: str, destination: str, stopid: int,
@@ -58,8 +60,8 @@ class WatchedStop:
 
 class Trip:
     def __init__(self, origin: UUID, destination: UUID, date: date,
-                 dep_time: _time, dep_delay: Optional[float],
-                 arr_time: _time, arr_delay: Optional[float],
+                 dep_time: time, dep_delay: Optional[float],
+                 arr_time: time, arr_delay: Optional[float],
                  train_name: str) -> None:
         self.origin = origin
         self.destionation = destination
@@ -72,11 +74,11 @@ class Trip:
 
 class AggregatedTrip:
     def __init__(self, train_name: str,
-                 dep_time: _time,
+                 dep_time: time,
                  dep_delay_median: Optional[float],
                  dep_delay_90perc: Optional[float],
                  dep_delay_stdev: Optional[float],
-                 arr_time: _time,
+                 arr_time: time,
                  arr_delay_median: Optional[float],
                  arr_delay_90perc: Optional[float],
                  arr_delay_stdev: Optional[float],
@@ -93,7 +95,7 @@ class AggregatedTrip:
         self.count = count
 
 class AggregatedDeparture:
-    def __init__(self, train_name: str, destination: UUID, time: _time,
+    def __init__(self, train_name: str, destination: UUID, time: time,
                  delay_median: Optional[float], count: int) -> None:
         self.destination = destination
         self.train_name = train_name
