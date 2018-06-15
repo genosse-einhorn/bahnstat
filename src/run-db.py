@@ -13,6 +13,7 @@ ap = ArgumentParser()
 
 ap.add_argument('--db-file', required=True)
 ap.add_argument('--log', default='WARN')
+ap.add_argument('--api-key', default=DB_API_KEY)
 
 args = ap.parse_args()
 
@@ -22,6 +23,6 @@ if not isinstance(num_loglevel, int):
 
 logging.basicConfig(level=num_loglevel)
 
-r = Runner(args.db_file, [WatchedStop(UUID(a),b,c) for a,b,c in DB_STOPS], DB_API_KEY, SystemdNotifier().watchdog)
+r = Runner(args.db_file, [WatchedStop(UUID(a),b,c) for a,b,c in DB_STOPS], args.api_key, SystemdNotifier().watchdog)
 r.run()
 
