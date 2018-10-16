@@ -6,7 +6,7 @@ import math
 from datetime import datetime, date
 from uuid import UUID
 
-from bahnstat.efaxmlparser import departure_monitor_from_response
+from bahnstat.efaxmlclient import _departure_monitor_from_response as departure_monitor_from_response
 import bahnstat.mechanize_mini as minimech
 
 def TestCaseXml(filename):
