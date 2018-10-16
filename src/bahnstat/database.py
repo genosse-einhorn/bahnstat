@@ -94,7 +94,7 @@ def DATE_TYPE_SQL_CHECK(fieldname, t):
         return " (DATE_TYPE({}) = '{}') ".format(fieldname, t)
 
 
-DBVER_CURRENT = 1
+DBVER_CURRENT = 5
 
 class DatabaseConnection:
     """low-level database access"""
@@ -136,6 +136,8 @@ class DatabaseConnection:
             return True
 
     def _migrate_db(self):
+        should_vacuum = False
+
         with self:
             dbver = self.exec('PRAGMA user_version').fetchone()[0]
 
@@ -171,25 +173,273 @@ class DatabaseConnection:
 
                 dbver = 1
 
+            if dbver < 2:
+                # migration to db schema v2: use integer primary keys instead of UUIDs
+                # for inter-table relations to save space
+                self.exec('''ALTER TABLE WatchedStop RENAME TO WatchedStop_TMP''')
+                self.exec('''
+                    CREATE TABLE WatchedStop(
+                        pk INTEGER PRIMARY KEY,
+                        id UUID NOT NULL UNIQUE,
+                        efa_stop_id INTEGER NOT NULL,
+                        name TEXT NOT NULL)
+                    ''')
+                self.exec('''
+                    INSERT INTO WatchedStop (id, efa_stop_id, name)
+                    SELECT id, efa_stop_id, name FROM WatchedStop_TMP
+                    ''')
+
+                self.exec('''ALTER TABLE Departure RENAME TO Departure_TMP''')
+                self.exec('''
+                    CREATE TABLE Departure(
+                        stop_pk INTEGER REFERENCES WatchedStop(pk),
+                        time TIMESTAMP NOT NULL,
+                        delay REAL,
+                        trip_code TEXT NOT NULL,
+                        line_code TEXT NOT NULL,
+                        destination TEXT NOT NULL,
+                        train_name TEXT NOT NULL,
+                        UNIQUE(stop_pk,time,trip_code,line_code))
+                    ''')
+                self.exec('''
+                    INSERT INTO Departure (stop_pk, time, delay, trip_code, line_code, destination, train_name)
+                    SELECT WatchedStop.pk, time, delay, trip_code, line_code, destination, train_name
+                    FROM Departure_TMP
+                    INNER JOIN WatchedStop WHERE WatchedStop.id = Departure_TMP.stop
+                    ''')
+
+                self.exec('''ALTER TABLE Arrival RENAME TO Arrival_TMP''')
+                self.exec('''
+                    CREATE TABLE Arrival(
+                        stop_pk INTEGER REFERENCES WatchedStop(pk),
+                        time TIMESTAMP NOT NULL,
+                        delay REAL,
+                        trip_code TEXT NOT NULL,
+                        line_code TEXT NOT NULL,
+                        origin TEXT NOT NULL,
+                        train_name TEXT NOT NULL,
+                        UNIQUE(stop_pk,time,trip_code,line_code))
+                    ''')
+                self.exec('''
+                    INSERT INTO Arrival (stop_pk, time, delay, trip_code, line_code, origin, train_name)
+                    SELECT WatchedStop.pk, time, delay, trip_code, line_code, origin, train_name
+                    FROM Arrival_TMP
+                    INNER JOIN WatchedStop WHERE WatchedStop.id = Arrival_TMP.stop
+                    ''')
+
+                self.exec('DROP TABLE Arrival_TMP')
+                self.exec('DROP TABLE Departure_TMP')
+                self.exec('DROP TABLE WatchedStop_TMP')
+
+                should_vacuum = True
+
+                dbver = 2
+
+            if dbver < 3:
+                # db schema v3: do manual dictionary compression for line codes
+                self.exec('''
+                    CREATE TABLE LineCodeDictionary(
+                        pk INTEGER PRIMARY KEY,
+                        line_code TEXT UNIQUE NOT NULL)
+                    ''')
+                self.exec('''
+                    INSERT OR IGNORE INTO LineCodeDictionary (line_code)
+                    SELECT line_code FROM Departure
+                    ''')
+                self.exec('''
+                    INSERT OR IGNORE INTO LineCodeDictionary (line_code)
+                    SELECT line_code FROM Arrival
+                    ''')
+
+                self.exec('''ALTER TABLE Departure RENAME TO Departure_TMP''')
+                self.exec('''
+                    CREATE TABLE Departure(
+                        stop_pk INTEGER REFERENCES WatchedStop(pk),
+                        time TIMESTAMP NOT NULL,
+                        delay REAL,
+                        trip_code TEXT NOT NULL,
+                        line_code_pk INTEGER REFERENCES LineCodeDictionary(pk),
+                        destination TEXT NOT NULL,
+                        train_name TEXT NOT NULL,
+                        UNIQUE(stop_pk,time,trip_code,line_code_pk))
+                    ''')
+                self.exec('''
+                    INSERT INTO Departure (stop_pk, time, delay, trip_code, line_code_pk, destination, train_name)
+                    SELECT stop_pk, time, delay, trip_code, LineCodeDictionary.pk, destination, train_name
+                    FROM Departure_TMP
+                    INNER JOIN LineCodeDictionary WHERE LineCodeDictionary.line_code = Departure_TMP.line_code
+                    ''')
+
+                self.exec('''ALTER TABLE Arrival RENAME TO Arrival_TMP''')
+                self.exec('''
+                    CREATE TABLE Arrival(
+                        stop_pk INTEGER REFERENCES WatchedStop(pk),
+                        time TIMESTAMP NOT NULL,
+                        delay REAL,
+                        trip_code TEXT NOT NULL,
+                        line_code_pk INTEGER REFERENCES LineCodeDictionary(pk),
+                        origin TEXT NOT NULL,
+                        train_name TEXT NOT NULL,
+                        UNIQUE(stop_pk,time,trip_code,line_code_pk))
+                    ''')
+                self.exec('''
+                    INSERT INTO Arrival (stop_pk, time, delay, trip_code, line_code_pk, origin, train_name)
+                    SELECT stop_pk, time, delay, trip_code, LineCodeDictionary.pk, origin, train_name
+                    FROM Arrival_TMP
+                    INNER JOIN LineCodeDictionary WHERE LineCodeDictionary.line_code = Arrival_TMP.line_code
+                    ''')
+
+                self.exec('DROP TABLE Arrival_TMP')
+                self.exec('DROP TABLE Departure_TMP')
+
+                should_vacuum = True
+                dbver = 3
+
+            if dbver < 4:
+                # db schema v4: manual dictionary compression for origin and destination names
+                self.exec('''
+                    CREATE TABLE OriginDestinationDictionary(
+                        pk INTEGER PRIMARY KEY,
+                        name TEXT UNIQUE NOT NULL)
+                    ''')
+                self.exec('''
+                    INSERT OR IGNORE INTO OriginDestinationDictionary (name)
+                    SELECT destination FROM Departure
+                    ''')
+                self.exec('''
+                    INSERT OR IGNORE INTO OriginDestinationDictionary (name)
+                    SELECT origin FROM Arrival
+                    ''')
+
+                self.exec('''ALTER TABLE Departure RENAME TO Departure_TMP''')
+                self.exec('''
+                    CREATE TABLE Departure(
+                        stop_pk INTEGER REFERENCES WatchedStop(pk),
+                        time TIMESTAMP NOT NULL,
+                        delay REAL,
+                        trip_code TEXT NOT NULL,
+                        line_code_pk INTEGER REFERENCES LineCodeDictionary(pk),
+                        destination_pk INTEGER REFERENCES OriginDestinationDictionary(pk),
+                        train_name TEXT NOT NULL,
+                        UNIQUE(stop_pk,time,trip_code,line_code_pk))
+                    ''')
+                self.exec('''
+                    INSERT INTO Departure (stop_pk, time, delay, trip_code, line_code_pk, destination_pk, train_name)
+                    SELECT stop_pk, time, delay, trip_code, line_code_pk, OriginDestinationDictionary.pk, train_name
+                    FROM Departure_TMP
+                    INNER JOIN OriginDestinationDictionary WHERE OriginDestinationDictionary.name = Departure_TMP.destination
+                    ''')
+
+                self.exec('''ALTER TABLE Arrival RENAME TO Arrival_TMP''')
+                self.exec('''
+                    CREATE TABLE Arrival(
+                        stop_pk INTEGER REFERENCES WatchedStop(pk),
+                        time TIMESTAMP NOT NULL,
+                        delay REAL,
+                        trip_code TEXT NOT NULL,
+                        line_code_pk INTEGER REFERENCES LineCodeDictionary(pk),
+                        origin_pk INTEGER REFERENCES OriginDestinationDictionary(pk),
+                        train_name TEXT NOT NULL,
+                        UNIQUE(stop_pk,time,trip_code,line_code_pk))
+                    ''')
+                self.exec('''
+                    INSERT INTO Arrival (stop_pk, time, delay, trip_code, line_code_pk, origin_pk, train_name)
+                    SELECT stop_pk, time, delay, trip_code, line_code_pk, OriginDestinationDictionary.pk, train_name
+                    FROM Arrival_TMP
+                    INNER JOIN OriginDestinationDictionary ON OriginDestinationDictionary.name = Arrival_TMP.origin
+                    ''')
+
+                self.exec('DROP TABLE Arrival_TMP')
+                self.exec('DROP TABLE Departure_TMP')
+
+                dbver = 4
+                should_vacuum = True
+
+            if dbver < 5:
+                # db schema v5: manual dictionary compression for train names
+                self.exec('''
+                    CREATE TABLE TrainNameDictionary(
+                        pk INTEGER PRIMARY KEY,
+                        train_name TEXT UNIQUE NOT NULL)
+                    ''')
+                self.exec('''
+                    INSERT OR IGNORE INTO TrainNameDictionary(train_name)
+                    SELECT train_name FROM Departure
+                    ''')
+                self.exec('''
+                    INSERT OR IGNORE INTO TrainNameDictionary(train_name)
+                    SELECT train_name FROM Arrival
+                    ''')
+
+                self.exec('''ALTER TABLE Departure RENAME TO Departure_TMP''')
+                self.exec('''
+                    CREATE TABLE Departure(
+                        stop_pk INTEGER REFERENCES WatchedStop(pk),
+                        time TIMESTAMP NOT NULL,
+                        delay REAL,
+                        trip_code TEXT NOT NULL,
+                        line_code_pk INTEGER REFERENCES LineCodeDictionary(pk),
+                        destination_pk INTEGER REFERENCES OriginDestinationDictionary(pk),
+                        train_name_pk INTEGER REFERENCES TrainNameDictionary(pk),
+                        UNIQUE(stop_pk,time,trip_code,line_code_pk))
+                    ''')
+                self.exec('''
+                    INSERT INTO Departure (stop_pk, time, delay, trip_code, line_code_pk, destination_pk, train_name_pk)
+                    SELECT stop_pk, time, delay, trip_code, line_code_pk, destination_pk, TrainNameDictionary.pk
+                    FROM Departure_TMP
+                    INNER JOIN TrainNameDictionary WHERE TrainNameDictionary.train_name = Departure_TMP.train_name
+                    ''')
+
+                self.exec('''ALTER TABLE Arrival RENAME TO Arrival_TMP''')
+                self.exec('''
+                    CREATE TABLE Arrival(
+                        stop_pk INTEGER REFERENCES WatchedStop(pk),
+                        time TIMESTAMP NOT NULL,
+                        delay REAL,
+                        trip_code TEXT NOT NULL,
+                        line_code_pk INTEGER REFERENCES LineCodeDictionary(pk),
+                        origin_pk INTEGER REFERENCES OriginDestinationDictionary(pk),
+                        train_name_pk INTEGER REFERENCES TrainNameDictionary(pk),
+                        UNIQUE(stop_pk,time,trip_code,line_code_pk))
+                    ''')
+                self.exec('''
+                    INSERT INTO Arrival (stop_pk, time, delay, trip_code, line_code_pk, origin_pk, train_name_pk)
+                    SELECT stop_pk, time, delay, trip_code, line_code_pk, origin_pk, TrainNameDictionary.pk
+                    FROM Arrival_TMP
+                    INNER JOIN TrainNameDictionary ON TrainNameDictionary.train_name = Arrival_TMP.train_name
+                    ''')
+
+                self.exec('DROP TABLE Arrival_TMP')
+                self.exec('DROP TABLE Departure_TMP')
+
+                dbver = 5
+                should_vacuum = True
+
             assert dbver == DBVER_CURRENT
             self.exec('PRAGMA user_version = {}'.format(dbver))
+
+        if should_vacuum:
+            self.exec('VACUUM')
 
     def _setup_temps(self):
         self.exec('''
             CREATE TEMP VIEW trip
-            AS SELECT Departure.train_name as train_name,
-                      Departure.stop as origin,
-                      Arrival.stop as destination,
+            AS SELECT TrainNameDictionary.train_name as train_name,
+                      WatchedStop_Departure.id as origin,
+                      WatchedStop_Arrival.id as destination,
                       strftime('%Y-%m-%d', Departure.time) as date,
                       strftime('%H:%M', Departure.time) as dep_time,
                       Departure.delay as dep_delay,
                       strftime('%H:%M', Arrival.time) as arr_time,
                       Arrival.delay as arr_delay
             FROM Departure
-            JOIN Arrival ON Arrival.line_code = Departure.line_code
+            JOIN Arrival ON Arrival.line_code_pk = Departure.line_code_pk
              AND Arrival.trip_code = Departure.trip_code
              AND Arrival.time > Departure.time
-             AND julianday(Arrival.time) - julianday(Departure.time) < 0.5''')
+             AND julianday(Arrival.time) - julianday(Departure.time) < 0.5
+            JOIN WatchedStop WatchedStop_Departure ON WatchedStop_Departure.pk = Departure.stop_pk
+            JOIN WatchedStop WatchedStop_Arrival ON WatchedStop_Arrival.pk = Arrival.stop_pk
+            JOIN TrainNameDictionary ON TrainNameDictionary.pk = Departure.train_name_pk''')
 
     def _materialize_trip_view(self):
         with self:
@@ -225,35 +475,77 @@ class DatabaseAccessor:
                 VALUES (:uuid, :sid, :name)''',
                 uuid=stop.id, sid=stop.backend_stop_id, name=stop.name)
 
+    def _watched_stop_pk(self, stop: WatchedStop) -> int:
+        stop_pk, = self.connection.exec('SELECT pk FROM WatchedStop WHERE id = :uuid', uuid=stop.id).fetchone()
+        return stop_pk
+
+    def _persist_line_code(self, line_code: str) -> int:
+        self.connection.exec('''INSERT OR IGNORE
+                INTO LineCodeDictionary(line_code)
+                VALUES (:lc)''', lc=line_code)
+        line_code_pk, = self.connection.exec('''
+            SELECT pk FROM LineCodeDictionary WHERE line_code = :lc''',
+            lc=line_code).fetchone()
+        return line_code_pk
+
+    def _persist_train_name(self, train_name: str) -> int:
+        self.connection.exec('''INSERT OR IGNORE
+                INTO TrainNameDictionary(train_name)
+                VALUES (:name)''', name=train_name)
+        train_name_pk, = self.connection.exec('''
+            SELECT pk FROM TrainNameDictionary WHERE train_name = :tn''',
+            tn=train_name).fetchone()
+        return train_name_pk
+
+    def _persist_origin_destination(self, name: str) -> int:
+        self.connection.exec('''INSERT OR IGNORE
+                INTO OriginDestinationDictionary(name)
+                VALUES (:name)''', name=name)
+        name_pk, = self.connection.exec('''
+            SELECT pk FROM OriginDestinationDictionary WHERE name = :name''',
+            name=name).fetchone()
+        return name_pk
+
+
     def persist_departure(self, stop: WatchedStop, dep: Departure) -> None:
         with self.connection:
             # save scheduled data, unless it is already saved
+            stop_pk = self._watched_stop_pk(stop)
+            line_code_pk = self._persist_line_code(dep.line_code)
+            train_name_pk = self._persist_train_name(dep.train_name)
+            destination_pk = self._persist_origin_destination(dep.destination)
+
             self.connection.exec('''INSERT OR IGNORE
-                INTO Departure (stop, time, trip_code, line_code, destination, train_name)
+                INTO Departure (stop_pk, time, trip_code, line_code_pk, destination_pk, train_name_pk)
                 VALUES (:sid, :time, :tc, :lc, :dest, :name)''',
-                sid=stop.id, time=dep.time, tc=dep.trip_code, lc=dep.line_code,
-                dest=dep.destination, name=dep.train_name)
+                sid=stop_pk, time=dep.time, tc=dep.trip_code, lc=line_code_pk,
+                dest=destination_pk, name=train_name_pk)
 
             # then overwrite delay if we have one
             if dep.delay is not None:
                 self.connection.exec('''UPDATE Departure SET delay = :delay
-                    WHERE stop=:sid AND time=:time AND trip_code=:tc AND line_code=:lc''',
-                    delay=dep.delay, sid=stop.id, time=dep.time, tc=dep.trip_code, lc=dep.line_code)
+                    WHERE stop_pk=:sid AND time=:time AND trip_code=:tc AND line_code_pk=:lc''',
+                    delay=dep.delay, sid=stop_pk, time=dep.time, tc=dep.trip_code, lc=line_code_pk)
 
     def persist_arrival(self, stop: WatchedStop, arr: Arrival) -> None:
         with self.connection:
             # save scheduled data, unless it is already saved
+            stop_pk = self._watched_stop_pk(stop)
+            line_code_pk = self._persist_line_code(arr.line_code)
+            train_name_pk = self._persist_train_name(arr.train_name)
+            origin_pk = self._persist_origin_destination(arr.origin)
+
             self.connection.exec('''INSERT OR IGNORE
-                INTO Arrival (stop, time, trip_code, line_code, origin, train_name)
+                INTO Arrival (stop_pk, time, trip_code, line_code_pk, origin_pk, train_name_pk)
                 VALUES (:sid, :time, :tc, :lc, :orig, :name)''',
-                sid=stop.id, time=arr.time, tc=arr.trip_code, lc=arr.line_code,
-                orig=arr.origin, name=arr.train_name)
+                sid=stop_pk, time=arr.time, tc=arr.trip_code, lc=line_code_pk,
+                orig=origin_pk, name=train_name_pk)
 
             # then overwrite delay if we have one
             if arr.delay is not None:
                 self.connection.exec('''UPDATE Arrival SET delay = :delay
-                    WHERE stop=:sid AND time=:time AND trip_code=:tc AND line_code=:lc''',
-                    delay=arr.delay, sid=stop.id, time=arr.time, tc=arr.trip_code, lc=arr.line_code)
+                    WHERE stop_pk=:sid AND time=:time AND trip_code=:tc AND line_code_pk=:lc''',
+                    delay=arr.delay, sid=stop_pk, time=arr.time, tc=arr.trip_code, lc=line_code_pk)
 
     def all_watched_stops(self) -> Iterator[WatchedStop]:
         for id, efa_stop_id, name in self.connection.exec('SELECT id, efa_stop_id, name FROM WatchedStop'):
@@ -303,11 +595,14 @@ class DatabaseAccessor:
 
     def aggregated_departures(self, stop: WatchedStop) -> Iterator[AggregatedDeparture]:
         for train_name, destination, hour, minute, delay, count in self.connection.exec(
-                '''SELECT train_name, destination, strftime('%H', time) as hour,
+                '''SELECT train_name, OriginDestinationDictionary.name, strftime('%H', time) as hour,
                         strftime('%M', time) as minute, median(delay), COUNT(*)
                    FROM Departure
-                   WHERE stop = :stop
-                   GROUP BY train_name, destination, hour, minute
+                   JOIN WatchedStop ON WatchedStop.pk = Departure.stop_pk
+                   JOIN TrainNameDictionary ON TrainNameDictionary.pk = Departure.train_name_pk
+                   JOIN OriginDestinationDictionary ON OriginDestinationDictionary.pk = Departure.destination_pk
+                   WHERE WatchedStop.id = :stop
+                   GROUP BY train_name, OriginDestinationDictionary.name, hour, minute
                    ORDER BY hour, minute ASC''', stop=stop.id):
             yield AggregatedDeparture(train_name, destination, time(hour=int(hour), minute=int(minute)), delay, count)
 
@@ -317,7 +612,8 @@ class DatabaseAccessor:
                           MIN(strftime('%Y-%m-%d', time)),
                           MAX(strftime('%Y-%m-%d', time))
                    FROM Departure
-                   WHERE stop = :stop''', stop=stop.id).fetchone()
+                   JOIN WatchedStop ON WatchedStop.pk = Departure.stop_pk
+                   WHERE WatchedStop.id = :stop''', stop=stop.id).fetchone()
 
         return AggregateDateRange(int(count),
                                   datetime.strptime(min, '%Y-%m-%d').date(),
