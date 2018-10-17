@@ -571,7 +571,7 @@ class DatabaseAccessor:
                    ORDER BY dep_time ASC''', origin=origin.id, destination=dest.id):
             yield Trip(origin, dest, date, dep_time, dep_delay, arr_time, arr_delay, train_name)
 
-    def aggregated_trips(self, origin: WatchedStop, dest: WatchedStop, datetype:str='any') -> Iterator[AggregatedTrip]:
+    def aggregated_trips(self, origin: WatchedStop, dest: WatchedStop, datetype:str='any', daterange:int=30) -> Iterator[AggregatedTrip]:
         for train_name, dep_time, dep_delay, dep_delay_perc, dep_delay_stdev, \
             arr_time, arr_delay, arr_delay_perc, arr_delay_stdev, count in self.connection.exec(
                 '''SELECT train_name, dep_time, median(dep_delay), percentile(90, dep_delay), stdev(dep_delay),
@@ -579,20 +579,22 @@ class DatabaseAccessor:
                    FROM trip
                    WHERE origin = :origin AND destination = :destination
                    AND''' + DATE_TYPE_SQL_CHECK('date', datetype) +'''
+                   AND (JULIANDAY('now') - :dr - 1) < JULIANDAY(date)
                    GROUP BY train_name, dep_time, arr_time
-                   ORDER BY dep_time ASC''', origin=origin.id, destination=dest.id):
+                   ORDER BY dep_time ASC''', origin=origin.id, destination=dest.id, dr=daterange):
             yield AggregatedTrip(train_name,
                                  datetime.strptime(dep_time, '%H:%M').time(),
                                  dep_delay, dep_delay_perc, dep_delay_stdev,
                                  datetime.strptime(arr_time, '%H:%M').time(),
                                  arr_delay, arr_delay_perc, arr_delay_stdev, count)
 
-    def aggregated_trip_dates(self, origin: WatchedStop, dest: WatchedStop, datetype:str='any') -> AggregateDateRange:
+    def aggregated_trip_dates(self, origin: WatchedStop, dest: WatchedStop, datetype:str='any', daterange:int=30) -> AggregateDateRange:
         count, min, max = self.connection.exec(
             '''SELECT COUNT(distinct date), MIN(date), MAX(date) FROM Trip
                WHERE origin = :origin AND destination = :destination AND'''
-                    + DATE_TYPE_SQL_CHECK('date', datetype),
-                origin=origin.id, destination=dest.id).fetchone()
+                    + DATE_TYPE_SQL_CHECK('date', datetype) +
+            '''AND (JULIANDAY('now') - :dr - 1) < JULIANDAY(date)''',
+                origin=origin.id, destination=dest.id, dr=daterange).fetchone()
 
         if min is not None:
             min = datetime.strptime(min, '%Y-%m-%d').date()

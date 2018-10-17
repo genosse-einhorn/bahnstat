@@ -48,7 +48,8 @@ for s in stations:
         if d == s:
             continue
 
-        for t in ['all', 'mofr', 'sat', 'sun']:
-            writefile(os.path.join(outdir, str(s.id), str(d.id), t+'.html'), gen.trip_list(s, d, t))
+        for r in DATE_RANGES:
+            for t in ['all', 'mofr', 'sat', 'sun']:
+                writefile(os.path.join(outdir, str(s.id), str(d.id), '{}-{}.html'.format(r, t)), gen.trip_list(s, d, t, r))
 
 

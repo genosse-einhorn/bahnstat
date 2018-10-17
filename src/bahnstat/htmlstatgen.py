@@ -37,6 +37,8 @@ HTML_POSTAMBLE = '''<hr>
     durch <a href="https://github.com/rgcjonas/bahnstat">bahnstat</a>
     von <a href="mailto:bahnstat@genosse-einhorn.de">Jonas Kümmerlin</a></p>'''.format(datetime.utcnow())
 
+DATE_RANGES = [30, 60, 90, 180, 360]
+
 def TITLE(t):
     return '<title>{}</title>'.format(html.escape(t))
 
@@ -112,7 +114,7 @@ class HtmlStatGen:
                     continue
 
                 l.append('<li>')
-                l.append(A('{}/{}/all.html'.format(f.id, t.id), '➔ {}'.format(t.name)))
+                l.append(A('{}/{}/30-all.html'.format(f.id, t.id), '➔ {}'.format(t.name)))
 
             l.append('</ul>')
 
@@ -130,20 +132,38 @@ class HtmlStatGen:
 
         return ''.join(l)
 
-    def trip_list(self, origin, dest, datetype):
+    def trip_list(self, origin, dest, datetype, daterange):
         l = [HTML_PREAMBLE, TITLE('Statistik {} ➔ {}'.format(origin.name, dest.name))]
 
         l.append(H1('Statistik {} ➔ {}'.format(origin.name, dest.name)))
 
+        l.append('<table>')
+        l.append('<tr>')
+        l.append('<th>Zeitraum')
+        l.append('<td>Letzte ')
+        for r in DATE_RANGES:
+            if r == daterange:
+                l.append('<em>{}</em>'.format(r))
+            else:
+                l.append(A('{}-{}.html'.format(r, datetype), str(r)))
+            l.append(' | ')
+        l.pop()
+        l.append(' Tage')
+
+        l.append('<tr>')
+        l.append('<th>Wochentag')
+        l.append('<td>')
         for t, desc in [('all', 'Alle'), ('mofr', 'Montag-Freitag'), ('sat', 'Samstag'), ('sun', 'Sonn- und Feiertag')]:
             if t == datetype:
-                l.append('<strong>{}</strong>'.format(html.escape(desc)))
+                l.append('<em>{}</em>'.format(html.escape(desc)))
             else:
-                l.append(A(t + '.html', desc))
+                l.append(A('{}-{}.html'.format(daterange, t), desc))
             l.append(' | ')
         l.pop()
 
-        dates = self.db.aggregated_trip_dates(origin, dest, datetype)
+        l.append('</table>')
+
+        dates = self.db.aggregated_trip_dates(origin, dest, datetype, daterange)
         l.append('<p>Statistik über {} Verkehrstage von {} bis {}</p>'.format(dates.count, dates.first, dates.last))
 
         jumptimes = [time(2,0), time(4,0), time(6,0), time(8, 0), time(10, 0), time(12, 0),
@@ -163,7 +183,7 @@ class HtmlStatGen:
         l.append('<th>Zug<th>(n)<th>Plan<th>50%<th>90%<th>σ<th><th>Plan<th>50%<th>90%<th>σ')
 
         last_time = time(23,59)
-        for t in self.db.aggregated_trips(origin, dest, datetype):
+        for t in self.db.aggregated_trips(origin, dest, datetype, daterange):
 
             jt = highest_smaller(t.dep_time, jumptimes)
             if jt is not None and jt > last_time:
