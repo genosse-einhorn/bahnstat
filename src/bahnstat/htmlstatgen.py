@@ -28,6 +28,30 @@ CSS =   '''
             text-align: left;
             background-color: #ddd;
         }
+
+        #lowdata-checkbox, #longdist-checkbox, #regional-checkbox {
+            position:absolute;
+            left:-999999px;
+        }
+
+        #lowdata-checkbox:not(:checked) ~ * .lowdata,
+        #longdist-checkbox:not(:checked) ~ * .long-distance,
+        #regional-checkbox:not(:checked) ~ * .regional {
+            display:none;
+        }
+
+        #lowdata-checkbox ~ * label[for=lowdata-checkbox]::before,
+        #longdist-checkbox ~ * label[for=longdist-checkbox]::before,
+        #regional-checkbox ~ * label[for=regional-checkbox]::before {
+            content:"☐  ";
+            font-weight:bold;
+            font-size:110%;
+        }
+        #lowdata-checkbox:checked ~ * label[for=lowdata-checkbox]::before,
+        #longdist-checkbox:checked ~ * label[for=longdist-checkbox]::before,
+        #regional-checkbox:checked ~ * label[for=regional-checkbox]::before {
+            content:"☑ ";
+        }
         '''
 
 HTML_PREAMBLE = '<!DOCTYPE html><meta charset=UTF-8><meta name="viewport" content="width=device-width, initial-scale=1"><style>'+CSS+'</style>'
@@ -137,6 +161,10 @@ class HtmlStatGen:
 
         l.append(H1('Statistik {} ➔ {}'.format(origin.name, dest.name)))
 
+        l.append('<input type=checkbox id=lowdata-checkbox>')
+        l.append('<input type=checkbox id=longdist-checkbox checked>')
+        l.append('<input type=checkbox id=regional-checkbox checked>')
+
         l.append('<table>')
         l.append('<tr>')
         l.append('<th>Zeitraum')
@@ -160,6 +188,12 @@ class HtmlStatGen:
                 l.append(A('{}-{}.html'.format(daterange, t), desc))
             l.append(' | ')
         l.pop()
+
+        l.append('<tr>')
+        l.append('<th>Anzeigefilter')
+        l.append('<td><label for=lowdata-checkbox>Verbindungen mit wenigen Daten</label>')
+        l.append('<br><label for=longdist-checkbox>Fernverkehr (ICE/IC/EC/NJ)</label>')
+        l.append('<br><label for=regional-checkbox>Nahverkehr (RB/RE/IRE/...)</label>')
 
         l.append('</table>')
 
@@ -193,10 +227,17 @@ class HtmlStatGen:
 
             last_time = t.dep_time
 
+            classes = []
+
             if t.count < 0.5*dates.count:
-                l.append('<tr class=lowdata>')
+                classes.append('lowdata')
+
+            if t.train_name.startswith('IC') or t.train_name.startswith('EC') or t.train_name.startswith('NJ'):
+                classes.append('long-distance')
             else:
-                l.append('<tr>')
+                classes.append('regional')
+
+            l.append('<tr class="{}">'.format(str.join(' ', classes)))
 
             l.append('<td>')
             l.append(html.escape('{}'.format(t.train_name)))
