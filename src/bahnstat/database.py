@@ -535,6 +535,34 @@ class DatabaseAccessor:
                     WHERE stop_pk=:sid AND time=:time AND trip_code=:tc AND line_code_pk=:lc''',
                     delay=dep.delay, sid=stop_pk, time=dep.time, tc=dep.trip_code, lc=line_code_pk)
 
+    def departures(self, stop: WatchedStop, datetype:str='any', daterange:int=30):
+        for time, train_name, destination, stopid, trip_code, line_code, delay in self.connection.exec('''
+                SELECT Departure.time, TrainNameDictionary.train_name, OriginDestinationDictionary.name,
+                        WatchedStop.efa_stop_id, Departure.trip_code, LineCodeDictionary.line_code, Departure.delay
+                FROM Departure
+                JOIN WatchedStop ON WatchedStop.pk = Departure.stop_pk
+                JOIN LineCodeDictionary ON LineCodeDictionary.pk = Departure.line_code_pk
+                JOIN TrainNameDictionary ON TrainNameDictionary.pk = Departure.train_name_pk
+                JOIN OriginDestinationDictionary ON OriginDestinationDictionary.pk = Departure.destination_pk
+                WHERE WatchedStop.id = :stopid
+                    AND '''+DATE_TYPE_SQL_CHECK('Departure.time', datetype)+'''
+                    AND JULIANDAY(:today) - :dr < JULIANDAY(time)''', stopid=stop.id, dr=daterange, today=datetime.now().strftime('%Y-%m-%d')):
+            yield Departure(time, train_name, destination, stopid, trip_code, line_code, delay)
+
+    def arrivals(self, stop: WatchedStop, datetype:str='any', daterange:int=30):
+        for time, train_name, origin, stopid, trip_code, line_code, delay in self.connection.exec('''
+                SELECT Arrival.time, TrainNameDictionary.train_name, OriginDestinationDictionary.name,
+                        WatchedStop.efa_stop_id, Arrival.trip_code, LineCodeDictionary.line_code, Arrival.delay
+                FROM Arrival
+                JOIN WatchedStop ON WatchedStop.pk = Arrival.stop_pk
+                JOIN LineCodeDictionary ON LineCodeDictionary.pk = Arrival.line_code_pk
+                JOIN TrainNameDictionary ON TrainNameDictionary.pk = Arrival.train_name_pk
+                JOIN OriginDestinationDictionary ON OriginDestinationDictionary.pk = Arrival.origin_pk
+                WHERE WatchedStop.id = :stopid
+                    AND '''+DATE_TYPE_SQL_CHECK('Arrival.time', datetype)+'''
+                    AND JULIANDAY(:today) - :dr < JULIANDAY(time)''', stopid=stop.id, dr=daterange, today=datetime.now().strftime('%Y-%m-%d')):
+            yield Arrival(time, train_name, origin, stopid, trip_code, line_code, delay)
+
     def persist_arrival(self, stop: WatchedStop, arr: Arrival) -> None:
         with self.connection:
             # save scheduled data, unless it is already saved
