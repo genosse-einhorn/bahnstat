@@ -22,6 +22,6 @@ if not isinstance(num_loglevel, int):
 
 logging.basicConfig(level=num_loglevel)
 
-r = Runner(args.db_file, [WatchedStop(UUID(a),b,c) for a,b,c in EFA_STOPS], EFA_USER_AGENT, SystemdNotifier().watchdog)
+r = Runner(args.db_file, [WatchedStop(UUID(a),b,c,d) for a,b,c,d in EFA_STOPS], EFA_USER_AGENT, SystemdNotifier().watchdog)
 r.run()
 

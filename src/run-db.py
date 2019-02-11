@@ -23,6 +23,6 @@ if not isinstance(num_loglevel, int):
 
 logging.basicConfig(level=num_loglevel)
 
-r = Runner(args.db_file, [WatchedStop(UUID(a),b,c) for a,b,c in DB_STOPS], args.api_key, SystemdNotifier().watchdog)
+r = Runner(args.db_file, [WatchedStop(UUID(a),b,c,d) for a,b,c,d in DB_STOPS], args.api_key, SystemdNotifier().watchdog)
 r.run()
 

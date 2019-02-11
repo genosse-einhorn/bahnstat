@@ -54,8 +54,8 @@ class Runner:
 
         self.stops = list(stops)
         self.watchers = [] # type: List[Union[DepartureWatcher, ArrivalWatcher]]
-        self.watchers.extend(DepartureWatcher(s, self.client, self.db) for s in self.stops)
-        self.watchers.extend(ArrivalWatcher(s, self.client, self.db) for s in self.stops)
+        self.watchers.extend(DepartureWatcher(s, self.client, self.db) for s in self.stops if s.active)
+        self.watchers.extend(ArrivalWatcher(s, self.client, self.db) for s in self.stops if s.active)
         self._watchdog_func = watchdog_func
 
     def _watchdog(self) -> None:

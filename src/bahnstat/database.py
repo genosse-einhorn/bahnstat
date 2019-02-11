@@ -94,7 +94,7 @@ def DATE_TYPE_SQL_CHECK(fieldname, t):
         return " (DATE_TYPE({}) = '{}') ".format(fieldname, t)
 
 
-DBVER_CURRENT = 5
+DBVER_CURRENT = 6
 
 class DatabaseConnection:
     """low-level database access"""
@@ -415,6 +415,14 @@ class DatabaseConnection:
                 dbver = 5
                 should_vacuum = True
 
+            if dbver < 6:
+                # active flag in WatchedStop table
+
+                self.exec('ALTER TABLE WatchedStop ADD COLUMN active INTEGER NOT NULL DEFAULT 0')
+                self.exec('UPDATE WatchedStop SET active = 1')
+
+                dbver = 6
+
             assert dbver == DBVER_CURRENT
             self.exec('PRAGMA user_version = {}'.format(dbver))
 
@@ -472,16 +480,22 @@ class DatabaseAccessor:
         # NOTE: can't use INSERT OR REPLACE here, because that might change the rowid primary key
         # and then run into a foreign key constraint violation.
         with self.connection:
+
+            if stop.active:
+                active = 1
+            else:
+                active = 0
+
             old_row = self.connection.exec('SELECT pk FROM WatchedStop WHERE id = :uuid', uuid=stop.id).fetchone()
             if old_row is not None:
                 pk, = old_row
 
-                self.connection.exec('UPDATE WatchedStop SET efa_stop_id=:sid, name=:name WHERE pk=:pk', pk=pk, sid=stop.backend_stop_id, name=stop.name)
+                self.connection.exec('UPDATE WatchedStop SET efa_stop_id=:sid, name=:name, active=:active WHERE pk=:pk', pk=pk, sid=stop.backend_stop_id, name=stop.name, active=active)
             else:
                 self.connection.exec('''
-                    INSERT INTO WatchedStop (id, efa_stop_id, name)
-                    VALUES (:uuid, :sid, :name)''',
-                    uuid=stop.id, sid=stop.backend_stop_id, name=stop.name)
+                    INSERT INTO WatchedStop (id, efa_stop_id, name, active)
+                    VALUES (:uuid, :sid, :name, :active)''',
+                    uuid=stop.id, sid=stop.backend_stop_id, name=stop.name, active=active)
 
     def _watched_stop_pk(self, stop: WatchedStop) -> int:
         stop_pk, = self.connection.exec('SELECT pk FROM WatchedStop WHERE id = :uuid', uuid=stop.id).fetchone()
@@ -584,13 +598,13 @@ class DatabaseAccessor:
                     delay=arr.delay, sid=stop_pk, time=arr.time, tc=arr.trip_code, lc=line_code_pk)
 
     def all_watched_stops(self) -> Iterator[WatchedStop]:
-        for id, efa_stop_id, name in self.connection.exec('SELECT id, efa_stop_id, name FROM WatchedStop'):
-            yield WatchedStop(id, efa_stop_id, name)
+        for id, efa_stop_id, name, active in self.connection.exec('SELECT id, efa_stop_id, name, active FROM WatchedStop'):
+            yield WatchedStop(id, efa_stop_id, name, bool(active))
 
     def watched_stop_by_id(self, id) -> WatchedStop:
-        id, efa_stop_id, name = self.connection.exec(
-            'SELECT id, efa_stop_id, name FROM WatchedStop WHERE id = :id', id=id).fetchone()
-        return WatchedStop(id, efa_stop_id, name)
+        id, efa_stop_id, name, active = self.connection.exec(
+            'SELECT id, efa_stop_id, name, active FROM WatchedStop WHERE id = :id', id=id).fetchone()
+        return WatchedStop(id, efa_stop_id, name, bool(active))
 
     def trips(self, origin: WatchedStop, dest: WatchedStop) -> Iterator[Trip]:
         for train_name, date, dep_time, dep_delay, arr_time, arr_delay in self.connection.exec(

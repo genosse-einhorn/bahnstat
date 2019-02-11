@@ -31,8 +31,9 @@ class Runner:
         self.db = DatabaseAccessor(DatabaseConnection(dbfile))
 
         self.stops = list(stops)
-        self._workers = [ _RunnerWorker(self.db, DbTimetableClient(s, auth=apikey, lookahead=timedelta(hours=2)))
-                         for s in self.stops ]
+        self._workers = [ _RunnerWorker(self.db, DbTimetableClient(s, auth=self.apikey, lookahead=timedelta(hours=2)))
+                         for s in self.stops if s.active ]
+
         self._watchdog_func = watchdog_func
 
     def _watchdog(self) -> None:
@@ -40,9 +41,11 @@ class Runner:
             self._watchdog_func()
 
     def run(self) -> None:
+        for s in self.stops:
+            self.db.persist_watched_stop(s)
+
         for w in self._workers:
             _log.debug('initial sync for stop {} '.format(w.client.station.name))
-            self.db.persist_watched_stop(w.client.station)
 
             w.perform()
             self._watchdog()

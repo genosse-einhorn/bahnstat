@@ -29,10 +29,11 @@ class Arrival:
         self.delay = delay
 
 class WatchedStop:
-    def __init__(self, id: UUID, backend_stop_id: int, name: str) -> None:
+    def __init__(self, id: UUID, backend_stop_id: int, name: str, active: bool = True) -> None:
         self.id = id
         self.backend_stop_id = backend_stop_id
         self.name = name
+        self.active = active
 
     def __eq__(self, other):
         if isinstance(self, other.__class__):
