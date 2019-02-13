@@ -19,6 +19,9 @@ if len(stations) < 2:
     print('WARN: less than two watched stops')
 
 for s in stations:
+    if not s.active:
+        continue
+
     deps = db.departures(s, daterange=1)
     if next(deps, None) is None:
         print('WARN: no departures at {} in the last 24 hours'.format(s.name))
