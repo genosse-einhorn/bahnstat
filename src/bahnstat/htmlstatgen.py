@@ -77,6 +77,8 @@ def DELAY(d):
         return ''
     elif d == math.inf:
         return '<span class=delayed>+∞</span>'
+    elif d < 0:
+        return '<span class=ontime>−{:.0f}</span>'.format(-d)
     elif d < 5:
         return '<span class=ontime>+{:.0f}</span>'.format(d)
     else:
