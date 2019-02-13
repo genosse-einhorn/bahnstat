@@ -601,6 +601,19 @@ class DatabaseAccessor:
         for id, efa_stop_id, name, active in self.connection.exec('SELECT id, efa_stop_id, name, active FROM WatchedStop'):
             yield WatchedStop(id, efa_stop_id, name, bool(active))
 
+    def active_watched_stops(self) -> Iterator[WatchedStop]:
+        for id, efa_stop_id, name in self.connection.exec('SELECT id, efa_stop_id, name FROM WatchedStop WHERE active=1'):
+            yield WatchedStop(id, efa_stop_id, name, True)
+
+    def active_destinations(self, origin: WatchedStop) -> Iterator[WatchedStop]:
+        for id, efa_stop_id, name in self.connection.exec(
+             '''SELECT DISTINCT WatchedStop.id, WatchedStop.efa_stop_id, WatchedStop.name
+                FROM WatchedStop
+                JOIN Trip ON Trip.destination = WatchedStop.id
+                WHERE WatchedStop.active = 1
+                AND Trip.origin = :origin''', origin=origin.id):
+            yield WatchedStop(id, efa_stop_id, name, True)
+
     def watched_stop_by_id(self, id) -> WatchedStop:
         id, efa_stop_id, name, active = self.connection.exec(
             'SELECT id, efa_stop_id, name, active FROM WatchedStop WHERE id = :id', id=id).fetchone()

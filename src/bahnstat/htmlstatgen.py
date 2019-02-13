@@ -119,7 +119,7 @@ class HtmlStatGen:
     def station_list(self):
         l = [HTML_PREAMBLE, TITLE('Bahnstatistik auswählen')]
 
-        station_list = [s for s in self.db.all_watched_stops() if s.active]
+        station_list = list(self.db.active_watched_stops())
 
         l.append(H1('Route auswählen'))
 
@@ -133,10 +133,7 @@ class HtmlStatGen:
             l.append('<td>')
 
             l.append('<ul style="list-style: none;padding-left: 0;">')
-            for t in station_list:
-                if t == f:
-                    continue
-
+            for t in self.db.active_destinations(f):
                 l.append('<li>')
                 l.append(A('{}/{}/30-all.html'.format(f.id, t.id), '➔ {}'.format(t.name)))
 
