@@ -103,7 +103,7 @@ LEGEND = '''
     <dl>
         <dt>(n)</dt>
         <dd>Anzahl Datensätze für diesen Zug. Sind signifikant weniger Datensätze als Verkehrstage beobachtet worden,
-            dann wird die Zeile heller gefärbt.</dd>
+            wird die Zeile heller gefärbt.</dd>
         <dt>50%</dt>
         <dd>Median der Verspätung: 50% der beobachteten Züge hatten höchstens so viel Verspätung.</dd>
         <dt>90%</dt>
@@ -231,7 +231,7 @@ class HtmlStatGen:
             if t.count < 0.5*dates.count:
                 classes.append('lowdata')
 
-            if t.train_name.startswith('IC') or t.train_name.startswith('EC') or t.train_name.startswith('NJ'):
+            if t.train_name.startswith('IC') or t.train_name.startswith('EC') or t.train_name.startswith('NJ') or t.train_name.startswith('TGV'):
                 classes.append('long-distance')
             else:
                 classes.append('regional')
